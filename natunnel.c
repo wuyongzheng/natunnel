@@ -55,6 +55,7 @@ int resolve_ipv4_address (const char *addrstr, struct sockaddr_in *addr, int por
 		assert(rp->ai_addrlen == sizeof(struct sockaddr_in));
 		memcpy(addr, rp->ai_addr, sizeof(struct sockaddr_in));
 		addr->sin_port = htons(port);
+		freeaddrinfo(result);
 		return 0;
 	}
 	return 1;
