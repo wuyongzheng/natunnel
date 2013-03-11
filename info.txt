@@ -1,0 +1,36 @@
+Natunnel Server Protocol:
+
+Three parties:
+S: Natunnel Server
+P: Passive Party
+A: Active Party
+
+== Passive Party ID registration ==
+P -> S: REGISTER
+S -> P: REGISTER_OK, pub_id, priv_token
+
+== Who am I session ==
+X -> S: WHOAMI
+S -> X: WAI_SERVERS, ip1, port1, ip2, port2
+X -> ip1/port1: (connect, TCP)
+ip1/port1 -> X: WHOYOUARE, X's ip, port, WHOAMI_token
+X -> ip2/port2: (connect, TCP, same src port)
+ip2/port2 -> X: WHOYOUARE, X's ip, port, WHOAMI_token
+
+== Passive Party update presence ==
+P -> S: UPDATE, priv_token, P's ip, P's port, WHOAMI_token
+S -> P: UPDATE_OK
+
+== NAT Punch Through ==
+1.  A -> S: INVITE, pub_id, A's ip, A's port, WHOAMI_token
+2a. S -> A: INVITE1, P's ip/port
+2b. S -> P: INVITE1, A's ip/port (2a,2b no order)
+3a. A -> P: (connect)
+3b. P -> A: (connect) hello (3a,3b no order)
+4.  A -> P: tunnel to ip/port
+5.  P -> A: OK
+6.  A <-> P: tunnel data
+
+== NAT Query (TCP) ==
+X -> S: NAT_QUERY
+S -> X: NAT_ANSWER N's public ip/port
