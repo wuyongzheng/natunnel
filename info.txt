@@ -23,8 +23,8 @@ S -> P: UPDATE_OK
 
 == NAT Punch Through ==
 1.  A -> S: INVITE, pub_id, A's ip, A's port, WHOAMI_token
-2a. S -> A: INVITE1, P's ip/port
-2b. S -> P: INVITE1, A's ip/port (2a,2b no order)
+2a. S -> A: INVITE_A, P's ip/port
+2b. S -> P: INVITE_P, A's ip/port (2a,2b no order)
 3a. A -> P: (connect)
 3b. P -> A: (connect) hello (3a,3b no order)
 4.  A -> P: tunnel to ip/port
