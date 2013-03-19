@@ -184,7 +184,7 @@ static int do_timeoff (int ntlclient)
 	unsigned long ts_sec, ts_usec;
 
 	assert(gettimeofday(&tv, NULL) == 0);
-	t1 = tv.tv_sec * 1000000 + tv.tv_usec;
+	t1 = tv.tv_sec * 1000000ll + tv.tv_usec;
 
 	msglen = sprintf(msg, "TIME");
 	if (send(ntlclient, msg, msglen, 0) != msglen)
@@ -200,18 +200,18 @@ static int do_timeoff (int ntlclient)
 	}
 	msg[msglen] = '\0';
 	puts(msg);
-	if (sscanf(msg, "TIME_OK\t%lu\t%lu", &ts_sec, &ts_usec) != 3) {
+	if (sscanf(msg, "TIME_OK\t%lu\t%lu", &ts_sec, &ts_usec) != 2) {
 		printf("TIME response error\n");
 		return 2;
 	}
 
 	assert(gettimeofday(&tv, NULL) == 0);
-	t2 = tv.tv_sec * 1000000 + tv.tv_usec;
+	t2 = tv.tv_sec * 1000000ll + tv.tv_usec;
 
 	if (t2 - t1 <= timeoff_ttl) {
 		timeoff_ttl = t2 - t1;
 		timeoff_off = ts_sec * 1000000 + ts_usec - (t2 + t1) / 2;
-		printf("Time offset set to %lu (ttl=%lu)\n", (unsigned long)timeoff_off, timeoff_ttl);
+		printf("Time offset set to %ld (ttl=%lu)\n", (long)timeoff_off, timeoff_ttl);
 		return 0;
 	} else
 		return 1;
@@ -243,7 +243,7 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 	}
 	msg[msglen] = '\0';
 	puts(msg);
-	if (sscanf(msg, "UPDATE_OK\t%lu\t%lu", &ts_sec, &ts_usec) != 3) {
+	if (sscanf(msg, "UPDATE_OK\t%lu\t%lu", &ts_sec, &ts_usec) != 2) {
 		printf("UPDATE response error\n");
 		return 1;
 	}
@@ -254,7 +254,7 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 	if (t2 - t1 <= timeoff_ttl) {
 		timeoff_ttl = t2 - t1;
 		timeoff_off = ts_sec * 1000000 + ts_usec - (t2 + t1) / 2;
-		printf("Time offset set to %lu (ttl=%lu)\n", (unsigned long)timeoff_off, timeoff_ttl);
+		printf("Time offset set to %ld (ttl=%lu)\n", (long)timeoff_off, timeoff_ttl);
 	}
 
 	return 0;
