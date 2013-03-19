@@ -67,13 +67,13 @@ static int resolve_ipv4_address (const char *addrstr, struct sockaddr_in *addr, 
 	return 1;
 }
 
-static int whoami_tcp (struct sockaddr_in *server_addr, int *intport, struct sockaddr_in *extaddr)
+static int whoami_test (int tcp, struct sockaddr_in *server_addr, int *intport, struct sockaddr_in *extaddr)
 {
 	int sock, argc, msglen, retval = 1;
 	char msg[500], *argv[6];
 	struct timeval tv;
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 	assert(sock >= 0);
 	argc = 1;
 	assert(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &argc, sizeof(int)) == 0);
@@ -95,7 +95,7 @@ static int whoami_tcp (struct sockaddr_in *server_addr, int *intport, struct soc
 	}
 	msglen = recv(sock, msg, sizeof(msg)-1, 0);
 	if (msglen <= 0) {
-		printf("recv from WAI tcp server failed\n");
+		printf("recv from WAI server failed\n");
 		goto out;
 	}
 	msg[msglen] = '\0';
@@ -124,12 +124,12 @@ out:
  *         1 unmatch. (only happens when tworound=1)
  *         2 other error.
  * */
-static int do_whoami (int ntlclient, int *intport, struct sockaddr_in *extaddr, int tworound)
+static int do_whoami (int tcp, int ntlclient, int *intport, struct sockaddr_in *extaddr, int tworound)
 {
 	int msglen, argc;
 	struct sockaddr_in addr, server_addr;
 	struct timeval tv;
-	char msg[500], *argv[6];
+	char msg[1000], *argv[14];
 
 	if (send(ntlclient, "WHOAMI", strlen("WHOAMI"), 0) != strlen("WHOAMI")) {
 		printf("send WHOAMI error\n");
@@ -147,25 +147,25 @@ static int do_whoami (int ntlclient, int *intport, struct sockaddr_in *extaddr, 
 	msg[msglen] = '\0';
 	puts(msg);
 	argc = tab_explode(msg, sizeof(argv)/sizeof(argv[0]), argv);
-	if (argc != 5 || strcmp(argv[0], "WAI_SERVERS") != 0) {
+	if (argc != 13 || strcmp(argv[0], "WAI_TCP") != 0) {
 		printf("WHOAMI response error\n");
 		return 2;
 	}
 
-	if (resolve_ipv4_address(argv[1], &server_addr, atoi(argv[2]))) {
+	if (resolve_ipv4_address(argv[tcp ? 1 : 6], &server_addr, atoi(argv[tcp ? 2 : 7]))) {
 		printf("WHOAMI response error\n");
 		return 2;
 	}
-	if (whoami_tcp(&server_addr, intport, extaddr))
+	if (whoami_test(tcp, &server_addr, intport, extaddr))
 		return 2;
 	if (!tworound)
 		return 0;
 
-	if (resolve_ipv4_address(argv[3], &server_addr, atoi(argv[4]))) {
+	if (resolve_ipv4_address(argv[tcp ? 3 : 8], &server_addr, atoi(argv[tcp ? 4 : 9]))) {
 		printf("WHOAMI response error\n");
 		return 2;
 	}
-	if (whoami_tcp(&server_addr, intport, &addr))
+	if (whoami_test(tcp, &server_addr, intport, &addr))
 		return 2;
 	if (memcmp(extaddr, &addr, sizeof(addr)))
 		return 1;
@@ -346,7 +346,7 @@ static int run_whoami (void)
 	assert(sock >= 0);
 	assert(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
 
-	do_whoami(sock, &intport, &addr, 1);
+	do_whoami(1, sock, &intport, &addr, 1);
 
 	return 0;
 }
@@ -362,7 +362,7 @@ static int run_passive (void)
 	assert(sock >= 0);
 	assert(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
 
-	assert(do_whoami(sock, &intport, &addr, 1) == 0);
+	assert(do_whoami(1, sock, &intport, &addr, 1) == 0);
 	assert(do_update(sock, option_ntlid, &addr) == 0);
 	lastupdate = time(NULL);
 
@@ -374,7 +374,7 @@ static int run_passive (void)
 
 		currtime = time(NULL);
 		if (currtime - lastupdate >= EXPIRE) {
-			if (do_whoami(sock, &intport, &addr, 0) == 0) {
+			if (do_whoami(1, sock, &intport, &addr, 0) == 0) {
 				do_update(sock, option_ntlid, &addr);
 			}
 			lastupdate = currtime; // we ignore update failure.
@@ -413,7 +413,7 @@ static int run_active (void)
 	assert(sock >= 0);
 	assert(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
 	do_timeoff(sock);
-	assert(do_whoami(sock, &intport, &addr, 1) == 0);
+	assert(do_whoami(1, sock, &intport, &addr, 1) == 0);
 	do_timeoff(sock);
 
 	msglen = sprintf(msg, "INVITE\t%s\t%s\t%d\tdummy",

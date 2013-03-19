@@ -30,7 +30,7 @@ int option_port = 6553;
 char *option_waiif1 = "58.182.120.26";
 char *option_waiif2 = "58.182.120.26";
 
-struct sockaddr_in whoami_addr[2];
+struct sockaddr_in whoamitcp_addr[2], whoamiudp_addr[2];
 struct hostentry *hostable[HOSTABLE_SIZE] = {0};
 int hostable_used = 0;
 time_t hostable_mtime = 0;
@@ -211,8 +211,11 @@ static void do_whoami (int argc, char *argv[], int sock, struct sockaddr_in *add
 	int i;
 
 	i = random() % 2;
-	ptr += sprintf(ptr, "WAI_SERVERS\t%s\t%d\t", inet_ntoa(whoami_addr[i].sin_addr), ntohs(whoami_addr[i].sin_port));
-	ptr += sprintf(ptr, "%s\t%d", inet_ntoa(whoami_addr[1-i].sin_addr), ntohs(whoami_addr[1-i].sin_port));
+	ptr += sprintf(ptr, "WAI_TCP\t%s\t%d\t", inet_ntoa(whoamitcp_addr[i].sin_addr), ntohs(whoamitcp_addr[i].sin_port));
+	ptr += sprintf(ptr, "%s\t%d", inet_ntoa(whoamitcp_addr[1-i].sin_addr), ntohs(whoamitcp_addr[1-i].sin_port));
+	ptr += sprintf(ptr, "WAI_UDP\t%s\t%d\t", inet_ntoa(whoamiudp_addr[i].sin_addr), ntohs(whoamiudp_addr[i].sin_port));
+	ptr += sprintf(ptr, "%s\t%d", inet_ntoa(whoamiudp_addr[1-i].sin_addr), ntohs(whoamiudp_addr[1-i].sin_port));
+	ptr += sprintf(ptr, "WYA\t%s\t%d\t", inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
 	assert(sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == strlen(msg));
 }
 
@@ -253,13 +256,13 @@ static void do_msg (char *msg, int sock, struct sockaddr_in *addr)
 		do_time(argc, argv, sock, addr);
 }
 
-void run_whoami_server (struct sockaddr_in *listen_addr, const char *whoami_if)
+void run_whoami_server (int tcp, struct sockaddr_in *listen_addr, const char *whoami_if)
 {
 	int sock;
 	struct sockaddr_in addr;
 	socklen_t addrlen;
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(AF_INET, tcp ? SOCK_STREAM : SOCK_DGRAM, 0);
 	assert(sock >= 0);
 
 	addr.sin_family = AF_INET;
@@ -278,23 +281,31 @@ void run_whoami_server (struct sockaddr_in *listen_addr, const char *whoami_if)
 		return;
 	}
 
-	assert(listen(sock, 1) == 0);
+	if (tcp)
+		assert(listen(sock, 1) == 0);
 	while (1) {
 		int client, msglen;
 		char *clientip, priv[41], msg[500];
 
 		memset(&addr, 0, sizeof(addr));
 		addrlen = sizeof(addr);
-		client = accept(sock, (struct sockaddr *)&addr, &addrlen);
-		assert(client >= 0);
-
+		if (tcp) {
+			client = accept(sock, (struct sockaddr *)&addr, &addrlen);
+			assert(client >= 0);
+		} else {
+			assert(recvfrom(sock, msg, sizeof(msg)-1, 0, (struct sockaddr *)&addr, &addrlen) > 0); // ignore message contents
+		}
 		clientip = inet_ntoa(addr.sin_addr);
 		assert(clientip != NULL);
 		compute_priv((const unsigned char *)clientip, strlen(clientip), priv);
 
 		msglen = sprintf(msg, "WHOYOUARE\t%s\t%d\t%s", clientip, ntohs(addr.sin_port), priv);
-		assert(send(client, msg, msglen, 0) == msglen);
-		close(client);
+		if (tcp) {
+			assert(send(client, msg, msglen, 0) == msglen);
+			close(client);
+		} else {
+			assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)&addr, addrlen) == msglen);
+		}
 	}
 }
 
@@ -303,8 +314,10 @@ int main (int argc, char *argv[])
 	int sock;
 	struct sockaddr_in addr;
 
-	run_whoami_server(&whoami_addr[0], option_waiif1);
-	run_whoami_server(&whoami_addr[1], option_waiif2);
+	run_whoami_server(1, &whoamitcp_addr[0], option_waiif1);
+	run_whoami_server(1, &whoamitcp_addr[1], option_waiif2);
+	run_whoami_server(0, &whoamiudp_addr[0], option_waiif1); // should we have separated if?
+	run_whoami_server(0, &whoamiudp_addr[1], option_waiif2);
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	assert(sock >= 0);
