@@ -217,7 +217,7 @@ static int do_timeoff (int ntlclient)
 		return 1;
 }
 
-static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *extaddr)
+static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *extaddrudp, struct sockaddr_in *extaddrtcp)
 {
 	int msglen;
 	char msg[500];
@@ -228,8 +228,10 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 	assert(gettimeofday(&tv, NULL) == 0);
 	t1 = tv.tv_sec * 1000000 + tv.tv_usec;
 
-	msglen = sprintf(msg, "UPDATE\t%s\t%s\t%d\tdummy",
-			ntlid, inet_ntoa(extaddr->sin_addr), ntohs(extaddr->sin_port));
+	msglen = sprintf(msg, "UPDATE\t%s\t%s\t%d\tdummy\t%s\t%d\tdummy",
+			ntlid,
+			inet_ntoa(extaddrudp->sin_addr), ntohs(extaddrudp->sin_port),
+			inet_ntoa(extaddrtcp->sin_addr), ntohs(extaddrtcp->sin_port));
 	if (send(ntlclient, msg, msglen, 0) != msglen)
 		return 1;
 
@@ -261,7 +263,7 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 }
 
 // no need to do clean up because exits anyway.
-static int do_tunnel (int intport, const char *peerip, int peerport)
+static int do_tunnel (int tcp, int intport, const char *peerip, int peerport)
 {
 	int sock, i;
 	struct sockaddr_in addr;
@@ -353,8 +355,8 @@ static int run_whoami (void)
 
 static int run_passive (void)
 {
-	int sock, intport = 0;
-	struct sockaddr_in addr;
+	int sock, intporttcp = 0, intportudp = 0;
+	struct sockaddr_in addr, addrtcp, addrudp;
 	time_t lastupdate;
 
 	assert(resolve_ipv4_address(option_serverip, &addr, option_serverport) == 0);
@@ -362,20 +364,22 @@ static int run_passive (void)
 	assert(sock >= 0);
 	assert(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
 
-	assert(do_whoami(1, sock, &intport, &addr, 1) == 0);
-	assert(do_update(sock, option_ntlid, &addr) == 0);
+	assert(do_whoami(0, sock, &intportudp, &addrudp, 1) == 0);
+	assert(do_whoami(1, sock, &intporttcp, &addrtcp, 1) == 0);
+	assert(do_update(sock, option_ntlid, &addrudp, &addrtcp) == 0);
 	lastupdate = time(NULL);
 
 	while (1) {
 		struct timeval tv;
 		time_t currtime;
-		char msg[500], *argv[4];
+		char msg[500], *argv[5];
 		int msglen, argc;
 
 		currtime = time(NULL);
 		if (currtime - lastupdate >= EXPIRE) {
-			if (do_whoami(1, sock, &intport, &addr, 0) == 0) {
-				do_update(sock, option_ntlid, &addr);
+			if (do_whoami(0, sock, &intportudp, &addrudp, 0) == 0 &&
+					do_whoami(1, sock, &intporttcp, &addrtcp, 0) == 0) {
+				do_update(sock, option_ntlid, &addrudp, &addrtcp);
 			}
 			lastupdate = currtime; // we ignore update failure.
 		}
@@ -389,12 +393,15 @@ static int run_passive (void)
 		msg[msglen] = '\0';
 		puts(msg);
 		argc = tab_explode(msg, sizeof(argv)/sizeof(argv[0]), argv);
-		if (argc != 3 || strcmp(argv[0], "INVITE_P") != 0)
+		if (argc != 4 || strcmp(argv[0], "INVITE_P") != 0)
 			continue;
 
 		if (fork() == 0) {
 			close(sock);
-			do_tunnel(intport, argv[1], atoi(argv[2]));
+			if (strcmp(argv[1], "TCP") == 0)
+				do_tunnel(1, intporttcp, argv[1], atoi(argv[2]));
+			else
+				do_tunnel(0, intportudp, argv[1], atoi(argv[2]));
 			exit(0);
 		}
 	}
@@ -426,7 +433,7 @@ static int run_active (void)
 	puts(msg);
 	argc = tab_explode(msg, sizeof(argv)/sizeof(argv[0]), argv);
 	assert(argc == 3 && strcmp(argv[0], "INVITE_A") == 0);
-	return do_tunnel(intport, argv[1], atoi(argv[2]));
+	return do_tunnel(1, intport, argv[1], atoi(argv[2]));
 }
 
 int main (int argc, char *argv[])
