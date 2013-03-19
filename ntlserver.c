@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -146,6 +147,7 @@ static void do_register (int argc, char *argv[], int sock, struct sockaddr_in *a
 static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *addr)
 {
 	char prvbuf[41], *pub, *prv, msg[32];
+	struct timeval tv;
 	int msglen;
 
 	if (argc != 5)
@@ -164,7 +166,8 @@ static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *add
 	hostable_update(pub, argv[2], atoi(argv[3]), addr);
 	hostable_maintain();
 
-	msglen = sprintf(msg, "UPDATE_OK");
+	assert(gettimeofday(&tv, NULL) == 0);
+	msglen = sprintf(msg, "UPDATE_OK\t%lu\t%lu", (unsigned long)tv.tv_sec, (unsigned long)tv.tv_usec);
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
 	return;
 errout:
@@ -213,6 +216,16 @@ static void do_whoami (int argc, char *argv[], int sock, struct sockaddr_in *add
 	assert(sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == strlen(msg));
 }
 
+static void do_time (int argc, char *argv[], int sock, struct sockaddr_in *addr)
+{
+	char msg[500];
+	struct timeval tv;
+
+	assert(gettimeofday(&tv, NULL) == 0);
+	sprintf(msg, "TIME_OK\t%lu\t%lu", (unsigned long)tv.tv_sec, (unsigned long)tv.tv_usec);
+	assert(sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == strlen(msg));
+}
+
 static void do_msg (char *msg, int sock, struct sockaddr_in *addr)
 {
 	char *argv[100];
@@ -236,6 +249,8 @@ static void do_msg (char *msg, int sock, struct sockaddr_in *addr)
 		do_invite(argc, argv, sock, addr);
 	else if (strcmp(argv[0], "WHOAMI") == 0)
 		do_whoami(argc, argv, sock, addr);
+	else if (strcmp(argv[0], "TIME") == 0)
+		do_time(argc, argv, sock, addr);
 }
 
 void run_whoami_server (struct sockaddr_in *listen_addr, const char *whoami_if)

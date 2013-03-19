@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -22,6 +23,8 @@ char *option_outip;
 int option_outport;
 int option_inport;
 char option_role;
+unsigned long timeoff_ttl = 100 * 1000000;
+long long timeoff_off = 0; /* server time - local time */
 
 static int tab_explode (char *str, int argc, char *argv[])
 {
@@ -169,11 +172,61 @@ static int do_whoami (int ntlclient, int *intport, struct sockaddr_in *extaddr, 
 	return 0;
 }
 
+/* return: 0 time updated
+ *         1 ttl is larger
+ *         2 error */
+static int do_timeoff (int ntlclient)
+{
+	int msglen;
+	char msg[500];
+	struct timeval tv;
+	unsigned long long t1, t2;
+	unsigned long ts_sec, ts_usec;
+
+	assert(gettimeofday(&tv, NULL) == 0);
+	t1 = tv.tv_sec * 1000000 + tv.tv_usec;
+
+	msglen = sprintf(msg, "TIME");
+	if (send(ntlclient, msg, msglen, 0) != msglen)
+		return 2;
+
+	tv.tv_sec = TIMEOUT;
+	tv.tv_usec = 0;
+	assert(setsockopt(ntlclient, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(struct timeval)) == 0);
+	msglen = recv(ntlclient, msg, sizeof(msg)-1, 0);
+	if (msglen <= 0) {
+		printf("recv TIME response failed\n");
+		return 2;
+	}
+	msg[msglen] = '\0';
+	puts(msg);
+	if (sscanf(msg, "TIME_OK\t%lu\t%lu", &ts_sec, &ts_usec) != 3) {
+		printf("TIME response error\n");
+		return 2;
+	}
+
+	assert(gettimeofday(&tv, NULL) == 0);
+	t2 = tv.tv_sec * 1000000 + tv.tv_usec;
+
+	if (t2 - t1 <= timeoff_ttl) {
+		timeoff_ttl = t2 - t1;
+		timeoff_off = ts_sec * 1000000 + ts_usec - (t2 + t1) / 2;
+		printf("Time offset set to %lu (ttl=%lu)\n", (unsigned long)timeoff_off, timeoff_ttl);
+		return 0;
+	} else
+		return 1;
+}
+
 static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *extaddr)
 {
 	int msglen;
 	char msg[500];
 	struct timeval tv;
+	unsigned long long t1, t2;
+	unsigned long ts_sec, ts_usec;
+
+	assert(gettimeofday(&tv, NULL) == 0);
+	t1 = tv.tv_sec * 1000000 + tv.tv_usec;
 
 	msglen = sprintf(msg, "UPDATE\t%s\t%s\t%d\tdummy",
 			ntlid, inet_ntoa(extaddr->sin_addr), ntohs(extaddr->sin_port));
@@ -190,9 +243,18 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 	}
 	msg[msglen] = '\0';
 	puts(msg);
-	if (strcmp("UPDATE_OK", msg)) {
+	if (sscanf(msg, "UPDATE_OK\t%lu\t%lu", &ts_sec, &ts_usec) != 3) {
 		printf("UPDATE response error\n");
 		return 1;
+	}
+
+	assert(gettimeofday(&tv, NULL) == 0);
+	t2 = tv.tv_sec * 1000000 + tv.tv_usec;
+
+	if (t2 - t1 <= timeoff_ttl) {
+		timeoff_ttl = t2 - t1;
+		timeoff_off = ts_sec * 1000000 + ts_usec - (t2 + t1) / 2;
+		printf("Time offset set to %lu (ttl=%lu)\n", (unsigned long)timeoff_off, timeoff_ttl);
 	}
 
 	return 0;
@@ -350,7 +412,9 @@ static int run_active (void)
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	assert(sock >= 0);
 	assert(connect(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+	do_timeoff(sock);
 	assert(do_whoami(sock, &intport, &addr, 1) == 0);
+	do_timeoff(sock);
 
 	msglen = sprintf(msg, "INVITE\t%s\t%s\t%d\tdummy",
 			option_ntlid, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
