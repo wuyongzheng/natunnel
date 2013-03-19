@@ -148,7 +148,7 @@ static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *add
 	char prvbuf[41], *pub, *prv, msg[32];
 	int msglen;
 
-	if (argc != 4)
+	if (argc != 5)
 		goto errout;
 	if (strchr(argv[1], ':') == NULL)
 		goto errout;
@@ -178,7 +178,7 @@ static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *add
 	char msg[1000];
 	int msglen;
 
-	if (argc != 4)
+	if (argc != 5)
 		goto errout;
 
 	//TODO: more input validation
@@ -190,11 +190,11 @@ static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *add
 	if (entry == NULL)
 		goto errout;
 
-	msglen = sprintf(msg, "INVITE1\t%s\t%d",
+	msglen = sprintf(msg, "INVITE_A\t%s\t%d",
 			inet_ntoa(entry->ip),
 			entry->port);
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
-	msglen = sprintf(msg, "INVITE1\t%s\t%s", argv[2], argv[3]);
+	msglen = sprintf(msg, "INVITE_P\t%s\t%s", argv[2], argv[3]);
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)&entry->addr, sizeof(struct sockaddr_in)) == msglen);
 	return;
 errout:
@@ -309,6 +309,7 @@ int main (int argc, char *argv[])
 		msglen = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&addr, &addrlen);
 		assert(msglen > 0 && msglen < sizeof(buffer));
 		buffer[msglen] = '\0';
+		printf("R: %s\n", buffer);
 		do_msg(buffer, sock, &addr);
 	}
 }
