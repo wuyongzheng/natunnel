@@ -11,6 +11,7 @@
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
+#include "udt-wrapper.h"
 
 #define EXPIRE (4*60)
 #define TIMEOUT 10
@@ -90,12 +91,14 @@ static int whoami_test (int tcp, struct sockaddr_in *server_addr, int *intport, 
 	}
 
 	if (connect(sock, (struct sockaddr *)server_addr, sizeof(struct sockaddr_in))) {
-		printf("connect to WAI tcp server failed\n");
+		printf("connect to WAI %s server failed\n", tcp ? "TCP" : "UDP");
 		goto out;
 	}
+	if (!tcp)
+		assert(send(sock, "WAI", 3, 0) == 3);
 	msglen = recv(sock, msg, sizeof(msg)-1, 0);
 	if (msglen <= 0) {
-		printf("recv from WAI server failed\n");
+		printf("recv from WAI %s server failed\n", tcp ? "TCP" : "UDP");
 		goto out;
 	}
 	msg[msglen] = '\0';
@@ -103,7 +106,7 @@ static int whoami_test (int tcp, struct sockaddr_in *server_addr, int *intport, 
 	argc = tab_explode(msg, sizeof(argv)/sizeof(argv[0]), argv);
 	if (argc != 4 || strcmp("WHOYOUARE", argv[0]) ||
 			resolve_ipv4_address(argv[1], extaddr, atoi(argv[2]))) {
-		printf("WAI tcp server response error\n");
+		printf("WAI %s server response error\n", tcp ? "TCP" : "UDP");
 		goto out;
 	}
 
@@ -263,7 +266,7 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 }
 
 // no need to do clean up because exits anyway.
-static int do_tunnel (int tcp, int intport, const char *peerip, int peerport)
+static int do_tunnel_tcpbiconn (int intport, const char *peerip, int peerport)
 {
 	int sock, i;
 	struct sockaddr_in addr;
@@ -311,6 +314,62 @@ static int do_tunnel (int tcp, int intport, const char *peerip, int peerport)
 		return 1;
 	}
 	if (recv(sock, buff, sizeof(buff), 0) <= 0) {
+		printf("recv() failed.");
+		return 1;
+	}
+	printf("received \"%s\"\n", buff);
+
+	return 0;
+}
+
+// no need to do clean up because exits anyway.
+static int do_tunnel_udt (int intport, const char *peerip, int peerport)
+{
+	int sock, i;
+	struct sockaddr_in addr;
+	char buff[1600];
+
+	sock = udt_socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+	assert(sock >= 0);
+	assert(udt_setsockopt_rendezvous(sock, 1) == 0);
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr.sin_port = htons(intport);
+	if (udt_bind(sock, (const struct sockaddr *)&addr, sizeof(addr))) {
+		printf("bind to port %d failed\n", intport);
+		return 1;
+	}
+
+	if (resolve_ipv4_address(peerip, &addr, peerport)) {
+		printf("failed to resolve %s\n", peerip);
+		return 1;
+	}
+
+	for (i = 0; i < PUNCH_RETRY; i ++) {
+		if (udt_connect(sock, (const struct sockaddr *)&addr, sizeof(addr)) == 0)
+			break;
+		if (errno != ETIMEDOUT) {
+			perror("connect() failed. retry in 2 sec.");
+			sleep(2);
+		} else {
+			perror("connect() failed.");
+		}
+	}
+
+	if (i >= PUNCH_RETRY) {
+		printf("fails to punch through NAT\n");
+		return 1;
+	}
+
+	snprintf(buff, sizeof(buff), "Hi, I'm %d.", getpid());
+	printf("sending \"%s\"\n", buff);
+	if (udt_send(sock, buff, strlen(buff) + 1, 0) != strlen(buff) + 1) {
+		printf("send() failed.");
+		return 1;
+	}
+	if (udt_recv(sock, buff, sizeof(buff), 0) <= 0) {
 		printf("recv() failed.");
 		return 1;
 	}
@@ -399,9 +458,9 @@ static int run_passive (void)
 		if (fork() == 0) {
 			close(sock);
 			if (strcmp(argv[1], "TCP") == 0)
-				do_tunnel(1, intporttcp, argv[1], atoi(argv[2]));
+				do_tunnel_tcpbiconn(intporttcp, argv[2], atoi(argv[3]));
 			else
-				do_tunnel(0, intportudp, argv[1], atoi(argv[2]));
+				do_tunnel_udt(intportudp, argv[2], atoi(argv[3]));
 			exit(0);
 		}
 	}
@@ -423,7 +482,7 @@ static int run_active (void)
 	assert(do_whoami(1, sock, &intport, &addr, 1) == 0);
 	do_timeoff(sock);
 
-	msglen = sprintf(msg, "INVITE\t%s\t%s\t%d\tdummy",
+	msglen = sprintf(msg, "INVITE\t%s\tUDP\t%s\t%d\tdummy",
 			option_ntlid, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 	assert(send(sock, msg, msglen, 0) == msglen);
 
@@ -432,8 +491,8 @@ static int run_active (void)
 	msg[msglen] = '\0';
 	puts(msg);
 	argc = tab_explode(msg, sizeof(argv)/sizeof(argv[0]), argv);
-	assert(argc == 3 && strcmp(argv[0], "INVITE_A") == 0);
-	return do_tunnel(1, intport, argv[1], atoi(argv[2]));
+	assert(argc == 4 && strcmp(argv[0], "INVITE_A") == 0);
+	return do_tunnel_udt(intport, argv[2], atoi(argv[3]));
 }
 
 int main (int argc, char *argv[])
