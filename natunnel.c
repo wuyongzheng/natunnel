@@ -438,7 +438,7 @@ static void *thread_udtpipe (void *arg)
 				printf("thread_udtpipe() recv failed udt_lasterror=%d\n", udt_getlasterror());
 			break;
 		}
-		printf("%s %d %02x%02x\n", isup ? "up" : "dn", (int)len, buff[0], buff[1]);
+		printf("%s %d %02x%02x%02x%02x\n", isup ? "up" : "dn", (int)len, buff[0], buff[1], buff[3], buff[4]);
 		while (sent < len) {
 			int len1 = isup ?
 				udt_send(udt_pipe->sock_udt, (char *)buff+sent, len-sent, 0) :
@@ -450,7 +450,7 @@ static void *thread_udtpipe (void *arg)
 					perror("thread_udtpipe() send failed");
 				break;
 			}
-			sent -= len1;
+			sent += len1;
 		}
 		if (sent < len) // send error
 			break;
