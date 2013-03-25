@@ -438,7 +438,7 @@ static void *thread_udtpipe (void *arg)
 				printf("thread_udtpipe() recv failed udt_lasterror=%d\n", udt_getlasterror());
 			break;
 		}
-		printf("%s %d %02x%02x%02x%02x\n", isup ? "up" : "dn", (int)len, buff[0], buff[1], buff[3], buff[4]);
+		//printf("%s %d %02x%02x%02x%02x\n", isup ? "up" : "dn", (int)len, buff[0], buff[1], buff[3], buff[4]);
 		while (sent < len) {
 			int len1 = isup ?
 				udt_send(udt_pipe->sock_udt, (char *)buff+sent, len-sent, 0) :
@@ -571,12 +571,12 @@ static int tunnel_wait (struct tunnel_info *info)
 
 	FD_ZERO(&rfds);
 	if (info->isactive)
-		FD_SET(info->control_pipe[1], &rfds);
+		FD_SET(info->control_pipe[0], &rfds);
 	FD_SET(info->sock_ext, &rfds);
-	retval = select(info->control_pipe[1] > info->sock_ext ? info->control_pipe[1] + 1 : info->sock_ext + 1, &rfds, NULL, NULL, NULL);
+	retval = select(info->control_pipe[0] > info->sock_ext ? info->control_pipe[0] + 1 : info->sock_ext + 1, &rfds, NULL, NULL, NULL);
 	assert(retval == 1);
-	if (info->isactive && FD_ISSET(info->control_pipe[1], &rfds)) {
-		msglen = recv(info->control_pipe[1], msgbuf, sizeof(msgbuf), 0); // we don't care about the contents
+	if (info->isactive && FD_ISSET(info->control_pipe[0], &rfds)) {
+		msglen = read(info->control_pipe[0], msgbuf, sizeof(msgbuf)); // we don't care about the contents
 		assert(msglen == 1);
 		assert(info->sock_int >= 0);
 		assert(!info->isfree); // we should be already unfreed by the pipe writer.
@@ -876,7 +876,7 @@ static void *thread_listener (void *arg)
 		assert(!info->isfree);
 		assert(info->control_pipe[1] >= 0);
 		info->sock_int = client;
-		assert(send(info->control_pipe[1], msg, 1, 0) == 1);
+		assert(write(info->control_pipe[1], msg, 1) == 1);
 	}
 	return NULL;
 }
