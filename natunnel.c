@@ -511,24 +511,36 @@ static int tunnel_handshake (struct tunnel_info *info)
 
 	if (info->isactive) {
 		encode_msglen(msgbuf, CTLMSG_INIT1);
-		if (send(info->sock_ext, msgbuf, 2, 0) != 2)
+		if (send(info->sock_ext, msgbuf, 2, 0) != 2) {
+			perror("tunnel_handshake() send to ext failed");
 			return -1;
+		}
 
 		msglen = recv(info->sock_ext, msgbuf, 2, 0);
-		if (msglen != 2)
+		if (msglen != 2) {
+			perror("tunnel_handshake() recv from ext failed");
 			return -1;
-		if (decode_msglen(msgbuf) != CTLMSG_INIT2)
+		}
+		if (decode_msglen(msgbuf) != CTLMSG_INIT2) {
+			printf("tunnel_handshake() expected CTLMSG_INIT2, but get %02x%02x\n", msgbuf[0], msgbuf[1]);
 			return -1;
+		}
 	} else {
 		msglen = recv(info->sock_ext, msgbuf, 2, 0);
-		if (msglen != 2)
+		if (msglen != 2) {
+			perror("tunnel_handshake() recv from ext failed");
 			return -1;
-		if (decode_msglen(msgbuf) != CTLMSG_INIT1)
+		}
+		if (decode_msglen(msgbuf) != CTLMSG_INIT1) {
+			printf("tunnel_handshake() expected CTLMSG_INIT1, but get %02x%02x\n", msgbuf[0], msgbuf[1]);
 			return -1;
+		}
 
 		encode_msglen(msgbuf, CTLMSG_INIT2);
-		if (send(info->sock_ext, msgbuf, 2, 0) != 2)
+		if (send(info->sock_ext, msgbuf, 2, 0) != 2) {
+			perror("tunnel_handshake() send to ext failed");
 			return -1;
+		}
 	}
 	return 0;
 }
@@ -554,28 +566,39 @@ static int tunnel_wait (struct tunnel_info *info)
 		assert(info->sock_int >= 0);
 		assert(!info->isfree); // we should be already unfreed by the pipe writer.
 		encode_msglen(msgbuf, CTLMSG_OPEN1);
-		if (send(info->sock_ext, msgbuf, 2, 0) != 2)
+		if (send(info->sock_ext, msgbuf, 2, 0) != 2) {
+			perror("tunnel_wait() send to ext failed");
 			return -1;
+		}
 		msglen = recv(info->sock_ext, msgbuf, 2, 0);
-		if (msglen != 2)
+		if (msglen != 2) {
+			perror("tunnel_wait() recv from ext failed");
 			return -1;
-		if (decode_msglen(msgbuf) != CTLMSG_OPEN2)
+		}
+		if (decode_msglen(msgbuf) != CTLMSG_OPEN2) {
+			printf("tunnel_wait() expected CTLMSG_OPEN2, but get %02x%02x\n", msgbuf[0], msgbuf[1]);
 			return -1;
+		}
 	}
 	if (FD_ISSET(info->sock_ext, &rfds)) {
 		struct sockaddr_in addr;
 		msglen = recv(info->sock_ext, msgbuf, 2, 0);
 		if (msglen < 0) {
-			perror("recv(info->sock_ext)");
+			perror("tunnel_wait() recv from ext failed");
 			return -1;
 		}
 		if (msglen == 0) {
 			printf("warning: ext sock close without FINI\n");
 			return -1;
 		}
-		assert(msglen == 2);
-		if (decode_msglen(msgbuf) == CTLMSG_FINI)
+		if (msglen != 2) {
+			printf("tunnel_wait() recv from ext, expect msglen=2, but got %d\n", msglen);
 			return -1;
+		}
+		if (decode_msglen(msgbuf) == CTLMSG_FINI) {
+			printf("tunnel_wait() got FINI.\n");
+			return -1;
+		}
 		if (info->isactive || decode_msglen(msgbuf) != CTLMSG_OPEN1) {
 			printf("invalid state: active=%d, CTLMSG=%d\n",
 					info->isactive,
@@ -586,8 +609,10 @@ static int tunnel_wait (struct tunnel_info *info)
 		assert(resolve_ipv4_address(option_outip, &addr, option_outport) == 0);
 		assert(connect(info->sock_int, (struct sockaddr *)&addr, sizeof(addr)) == 0);
 		encode_msglen(msgbuf, CTLMSG_OPEN2);
-		if (send(info->sock_ext, msgbuf, 2, 0) != 2)
+		if (send(info->sock_ext, msgbuf, 2, 0) != 2) {
+			perror("tunnel_wait() send OPEN2 to ext failed");
 			return -1;
+		}
 	}
 	return 0;
 }
@@ -636,8 +661,10 @@ static int tunnel_data (struct tunnel_info *info)
 		}
 		if (FD_ISSET(info->sock_ext, &wfds)) {
 			int len = send(info->sock_ext, bufup + uphead, uplen, 0);
-			if (len <= 0)
+			if (len <= 0) {
+				perror("tunnel_data() send to ext failed");
 				return -1;
+			}
 			uphead += len;
 			uplen -= len;
 		}
@@ -652,13 +679,17 @@ static int tunnel_data (struct tunnel_info *info)
 				return -1;
 			}
 			int len = recv(info->sock_ext, bufdown + downlen, torecv, 0);
-			if (len <= 0)
+			if (len <= 0) {
+				perror("tunnel_data() recv from ext failed");
 				return -1;
+			}
 			downlen += len;
 			if (downlen == 2) {
 				int msglen = decode_msglen(bufdown);
-				if (msglen == CTLMSG_FINI)
+				if (msglen == CTLMSG_FINI) {
+					printf("tunnel_data() recved FINI\n");
 					return -1;
+				}
 				if (msglen == CTLMSG_CLOSE) {
 					isactiveclose = 0;
 					break;
@@ -698,8 +729,10 @@ static int tunnel_data (struct tunnel_info *info)
 	// 1. send remaining bufup
 	while (uphead < uplen) {
 		int len = send(info->sock_ext, bufup + uphead, uplen, 0);
-		if (len <= 0)
+		if (len <= 0) {
+			perror("tunnel_data() send to ext failed");
 			return -1;
+		}
 		uphead += len;
 		uplen -= len;
 	}
@@ -709,8 +742,10 @@ static int tunnel_data (struct tunnel_info *info)
 	uplen = 2;
 	while (uphead < uplen) {
 		int len = send(info->sock_ext, bufup + uphead, uplen, 0);
-		if (len <= 0)
+		if (len <= 0) {
+			perror("tunnel_data() send to ext failed");
 			return -1;
+		}
 		uphead += len;
 		uplen -= len;
 	}
@@ -728,13 +763,17 @@ static int tunnel_data (struct tunnel_info *info)
 			return -1;
 		}
 		int len = recv(info->sock_ext, bufdown + downlen, torecv, 0);
-		if (len <= 0)
+		if (len <= 0) {
+			perror("tunnel_data() recv from ext failed");
 			return -1;
+		}
 		downlen += len;
 		if (downlen == 2) {
 			int msglen = decode_msglen(bufdown);
-			if (msglen == CTLMSG_FINI)
+			if (msglen == CTLMSG_FINI) {
+				printf("tunnel_data() recved FINI\n");
 				return -1;
+			}
 			if (msglen == CTLMSG_CLOSE) {
 				break;
 			}
