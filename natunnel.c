@@ -443,8 +443,13 @@ static void *thread_udtpipe (void *arg)
 			int len1 = isup ?
 				send(udt_pipe->sock_sys, buff+sent, len-sent, 0) :
 				udt_send(udt_pipe->sock_udt, (char *)buff+sent, len-sent, 0);
-			if (len1 <= 0)
+			if (len1 <= 0) {
+				if (isup)
+					printf("thread_udtpipe() send failed udt_lasterror=%d\n", udt_getlasterror());
+				else
+					perror("thread_udtpipe() send failed");
 				break;
+			}
 			sent -= len1;
 		}
 		if (sent < len) // send error
