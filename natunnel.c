@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -313,7 +314,7 @@ static int do_timeoff (int ntlclient)
 		return 1;
 }
 
-static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *extaddrudp, struct sockaddr_in *extaddrtcp)
+static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *extaddr_p2pnat, struct sockaddr_in *extaddr_udt)
 {
 	int msglen;
 	char msg[500];
@@ -326,8 +327,8 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 
 	msglen = sprintf(msg, "UPDATE\t%s\tP2PNAT\t%s\t%d\tdummy\tUDT\t%s\t%d\tdummy",
 			ntlid,
-			inet_ntoa(extaddrudp->sin_addr), ntohs(extaddrudp->sin_port),
-			inet_ntoa(extaddrtcp->sin_addr), ntohs(extaddrtcp->sin_port));
+			inet_ntoa(extaddr_p2pnat->sin_addr), ntohs(extaddr_p2pnat->sin_port),
+			inet_ntoa(extaddr_udt->sin_addr), ntohs(extaddr_udt->sin_port));
 	if (send(ntlclient, msg, msglen, 0) != msglen)
 		return 1;
 
@@ -487,6 +488,7 @@ static int do_punch_udt (int intport, const char *peerip, int peerport)
 	}
 
 	assert(socketpair(AF_UNIX, SOCK_STREAM, 0, spair) == 0);
+
 	udt_pipe = (struct udt_pipe_struct *)malloc(sizeof(struct udt_pipe_struct));
 	udt_pipe->up = udt_pipe->down = udt_pipe;
 	udt_pipe->sock_sys = spair[0];
@@ -870,7 +872,7 @@ static int run_passive (void)
 
 	assert(do_whoami(0, sock, &intportudp, &addrudp, 1) == 0);
 	assert(do_whoami(1, sock, &intporttcp, &addrtcp, 1) == 0);
-	assert(do_update(sock, option_ntlid, &addrudp, &addrtcp) == 0);
+	assert(do_update(sock, option_ntlid, &addrtcp, &addrudp) == 0);
 	lastupdate = time(NULL);
 
 	while (1) {
@@ -883,7 +885,7 @@ static int run_passive (void)
 		if (currtime - lastupdate >= EXPIRE) {
 			if (do_whoami(0, sock, &intportudp, &addrudp, 0) == 0 &&
 					do_whoami(1, sock, &intporttcp, &addrtcp, 0) == 0) {
-				do_update(sock, option_ntlid, &addrudp, &addrtcp);
+				do_update(sock, option_ntlid, &addrtcp, &addrudp);
 			}
 			lastupdate = currtime; // we ignore update failure.
 		}
@@ -997,6 +999,8 @@ int main (int argc, char *argv[])
 		printf("Active:   %s ntlserver-ip ntlserver-port pubid inport\n", argv[0]);
 		return 1;
 	}
+
+	signal(SIGPIPE, SIG_IGN);
 
 	switch (option_role) {
 		case 'R': return run_register();
