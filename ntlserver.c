@@ -18,13 +18,13 @@
 //TODO: Use a hash table and a LRU for faster maintaince time
 struct hostentry {
 	char *pubid;
-	struct in_addr udpip;
-	int udpport;
-	struct in_addr tcpip;
-	int tcpport;
 	time_t utime;
 	struct sockaddr_in addr;
 	struct hostentry *next;
+	struct in_addr udt_ip;
+	int udt_port;
+	struct in_addr p2pnat_ip;
+	int p2pnat_port;
 };
 
 char option_secret[] = "secret";
@@ -70,7 +70,7 @@ static void hostable_maintain (void)
 	}
 }
 
-static void hostable_update (const char *pubid, const char *udpip, int udpport, const char *tcpip, int tcpport, struct sockaddr_in *addr)
+static void hostable_update (const char *pubid, const char *p2pnat_ip, int p2pnat_port, const char *udt_ip, int udt_port, struct sockaddr_in *addr)
 {
 	unsigned long hashval = 0;
 	struct hostentry *entry;
@@ -84,23 +84,27 @@ static void hostable_update (const char *pubid, const char *udpip, int udpport, 
 	if (entry == NULL) {
 		entry = (struct hostentry *)malloc(sizeof(struct hostentry));
 		entry->pubid = strdup(pubid);
-		memset(&entry->udpip, 0, sizeof(entry->udpip));
-		assert(inet_aton(udpip, &entry->udpip));
-		entry->udpport = udpport;
-		memset(&entry->tcpip, 0, sizeof(entry->tcpip));
-		assert(inet_aton(tcpip, &entry->tcpip));
-		entry->tcpport = tcpport;
+		memset(&entry->udt_ip, 0, sizeof(entry->udt_ip));
+		if (udt_ip)
+			assert(inet_aton(udt_ip, &entry->udt_ip));
+		entry->udt_port = udt_port;
+		memset(&entry->p2pnat_ip, 0, sizeof(entry->p2pnat_ip));
+		if (p2pnat_ip)
+			assert(inet_aton(p2pnat_ip, &entry->p2pnat_ip));
+		entry->p2pnat_port = p2pnat_port;
 		entry->utime = time(NULL);
 		memcpy(&entry->addr, addr, sizeof(struct sockaddr_in));
 		entry->next = hostable[hashval];
 		hostable[hashval] = entry;
 	} else {
-		memset(&entry->udpip, 0, sizeof(entry->udpip));
-		assert(inet_aton(udpip, &entry->udpip));
-		entry->udpport = udpport;
-		memset(&entry->tcpip, 0, sizeof(entry->tcpip));
-		assert(inet_aton(tcpip, &entry->tcpip));
-		entry->tcpport = tcpport;
+		memset(&entry->udt_ip, 0, sizeof(entry->udt_ip));
+		if (udt_ip)
+			assert(inet_aton(udt_ip, &entry->udt_ip));
+		entry->udt_port = udt_port;
+		memset(&entry->p2pnat_ip, 0, sizeof(entry->p2pnat_ip));
+		if (p2pnat_ip)
+			assert(inet_aton(p2pnat_ip, &entry->p2pnat_ip));
+		entry->p2pnat_port = p2pnat_port;
 		entry->utime = time(NULL);
 		memcpy(&entry->addr, addr, sizeof(struct sockaddr_in));
 	}
@@ -158,7 +162,9 @@ static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *add
 	struct timeval tv;
 	int msglen;
 
-	if (argc != 8)
+	if (argc != 10) // TODO: should not hardcode methords
+		goto errout;
+	if (strcmp(argv[2], "P2PNAT") != 0 || strcmp(argv[6], "UDT") != 0)
 		goto errout;
 	if (strchr(argv[1], ':') == NULL)
 		goto errout;
@@ -171,7 +177,7 @@ static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *add
 		goto errout;
 
 	// input validation on ip address?
-	hostable_update(pub, argv[2], atoi(argv[3]), argv[5], atoi(argv[6]), addr);
+	hostable_update(pub, argv[3], atoi(argv[4]), argv[7], atoi(argv[8]), addr);
 	hostable_maintain();
 
 	assert(gettimeofday(&tv, NULL) == 0);
@@ -201,14 +207,14 @@ static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *add
 	if (entry == NULL)
 		goto errout;
 
-	if (strcmp(argv[2], "TCP") == 0) {
-		msglen = sprintf(msg, "INVITE_A\tTCP\t%s\t%d",
-				inet_ntoa(entry->tcpip),
-				entry->tcpport);
+	if (strcmp(argv[2], "P2PNAT") == 0) {
+		msglen = sprintf(msg, "INVITE_A\tP2PNAT\t%s\t%d",
+				inet_ntoa(entry->p2pnat_ip),
+				entry->p2pnat_port);
 	} else {
-		msglen = sprintf(msg, "INVITE_A\tUDP\t%s\t%d",
-				inet_ntoa(entry->udpip),
-				entry->udpport);
+		msglen = sprintf(msg, "INVITE_A\tUDT\t%s\t%d",
+				inet_ntoa(entry->udt_ip),
+				entry->udt_port);
 	}
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
 	msglen = sprintf(msg, "INVITE_P\t%s\t%s\t%s", argv[2], argv[3], argv[4]);
@@ -225,10 +231,10 @@ static void do_whoami (int argc, char *argv[], int sock, struct sockaddr_in *add
 	int i;
 
 	i = random() % 2;
-	ptr += sprintf(ptr, "WAI_TCP\t%s\t%d\t", inet_ntoa(whoamitcp_addr[i].sin_addr), ntohs(whoamitcp_addr[i].sin_port));
-	ptr += sprintf(ptr, "%s\t%d\t", inet_ntoa(whoamitcp_addr[1-i].sin_addr), ntohs(whoamitcp_addr[1-i].sin_port));
 	ptr += sprintf(ptr, "WAI_UDP\t%s\t%d\t", inet_ntoa(whoamiudp_addr[i].sin_addr), ntohs(whoamiudp_addr[i].sin_port));
 	ptr += sprintf(ptr, "%s\t%d\t", inet_ntoa(whoamiudp_addr[1-i].sin_addr), ntohs(whoamiudp_addr[1-i].sin_port));
+	ptr += sprintf(ptr, "WAI_TCP\t%s\t%d\t", inet_ntoa(whoamitcp_addr[i].sin_addr), ntohs(whoamitcp_addr[i].sin_port));
+	ptr += sprintf(ptr, "%s\t%d\t", inet_ntoa(whoamitcp_addr[1-i].sin_addr), ntohs(whoamitcp_addr[1-i].sin_port));
 	ptr += sprintf(ptr, "WYA\t%s\t%d", inet_ntoa(addr->sin_addr), ntohs(addr->sin_port));
 	assert(sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == strlen(msg));
 }

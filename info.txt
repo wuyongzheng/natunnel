@@ -11,26 +11,21 @@ S -> P: REGISTER_OK, pub_id, priv_token
 
 == Who am I session ==
 X -> S: WHOAMI
-S -> X: WAI_SERVERS, ip1, port1, ip2, port2
-X -> ip1/port1: (connect, TCP)
+S -> X: WAI_UDP, ip1, port1, ip2, port2, WAI_TCP, ip3, port3, ip4, port4, WYA, ip5, port5
+X -> ip1/port1: (connect for TCP; send anything for UDP)
 ip1/port1 -> X: WHOYOUARE, X's ip, port, WHOAMI_token
-X -> ip2/port2: (connect, TCP, same src port)
+X -> ip2/port2: (use the same src port to do again)
 ip2/port2 -> X: WHOYOUARE, X's ip, port, WHOAMI_token
 
 == Passive Party update presence ==
-P -> S: UPDATE, priv_token, P's ip, P's port, WHOAMI_token
+P -> S: UPDATE, priv_token, method1, P's ip, P's port, WHOAMI_token, method2, ...
 S -> P: UPDATE_OK
+method:
+  P2PNAT: Simultaneous connect, no listen. Ford's USENIX-ATC05 paper.
+  UDT: UDP-based Data Transfer Library
 
 == NAT Punch Through ==
-1.  A -> S: INVITE, pub_id, A's ip, A's port, WHOAMI_token
-2a. S -> A: INVITE_A, P's ip/port
-2b. S -> P: INVITE_P, A's ip/port (2a,2b no order)
-3a. A -> P: (connect)
-3b. P -> A: (connect) hello (3a,3b no order)
-4.  A -> P: tunnel to ip/port
-5.  P -> A: OK
-6.  A <-> P: tunnel data
-
-== NAT Query (TCP) ==
-X -> S: NAT_QUERY
-S -> X: NAT_ANSWER N's public ip/port
+1.  A -> S: INVITE, pub_id, method, A's ip, A's port, WHOAMI_token
+2a. S -> A: INVITE_A, method, P's ip/port
+2b. S -> P: INVITE_P, method, A's ip/port (2a,2b no order)
+3a. A <-> P: (connect) hole punching, tunnel data

@@ -24,7 +24,7 @@ int udt_send(int u, const char* buf, int len, int flags) {
 	return UDT::send((UDTSOCKET)u, buf, len, flags);
 }
 int udt_recv(int u, char* buf, int len, int flags) {
-	return UDT::send((UDTSOCKET)u, buf, len, flags);
+	return UDT::recv((UDTSOCKET)u, buf, len, flags);
 }
 
 int udt_setsockopt_rendezvous(int u, int rendezvous) {
