@@ -441,8 +441,8 @@ static void *thread_udtpipe (void *arg)
 		printf("%s %d %02x%02x\n", isup ? "up" : "dn", (int)len, buff[0], buff[1]);
 		while (sent < len) {
 			int len1 = isup ?
-				send(udt_pipe->sock_sys, buff+sent, len-sent, 0) :
-				udt_send(udt_pipe->sock_udt, (char *)buff+sent, len-sent, 0);
+				udt_send(udt_pipe->sock_udt, (char *)buff+sent, len-sent, 0) :
+				send(udt_pipe->sock_sys, buff+sent, len-sent, 0);
 			if (len1 <= 0) {
 				if (isup)
 					printf("thread_udtpipe() send failed udt_lasterror=%d\n", udt_getlasterror());
