@@ -420,7 +420,7 @@ static void *thread_udtpipe (void *arg)
 {
 	struct udt_pipe_struct *udt_pipe = *(struct udt_pipe_struct **)arg;
 	int isup;
-	char buff[2000];
+	unsigned char buff[2000];
 
 	assert(&udt_pipe->up == (struct udt_pipe_struct **)arg || &udt_pipe->down == (struct udt_pipe_struct **)arg);
 	isup = &udt_pipe->up == (struct udt_pipe_struct **)arg;
@@ -430,7 +430,7 @@ static void *thread_udtpipe (void *arg)
 		int sent = 0;
 		ssize_t len = isup ?
 			recv(udt_pipe->sock_sys, buff, sizeof(buff), 0) :
-			udt_recv(udt_pipe->sock_udt, buff, sizeof(buff), 0);
+			udt_recv(udt_pipe->sock_udt, (char *)buff, sizeof(buff), 0);
 		if (len <= 0) {
 			if (isup)
 				perror("thread_udtpipe() recv failed");
@@ -438,11 +438,11 @@ static void *thread_udtpipe (void *arg)
 				printf("thread_udtpipe() recv failed udt_lasterror=%d\n", udt_getlasterror());
 			break;
 		}
-		printf("%s %d %02x%02x\n", isup ? "up" : "dn", len, buff[0], buff[1]);
+		printf("%s %d %02x%02x\n", isup ? "up" : "dn", (int)len, buff[0], buff[1]);
 		while (sent < len) {
 			int len1 = isup ?
 				send(udt_pipe->sock_sys, buff+sent, len-sent, 0) :
-				udt_send(udt_pipe->sock_udt, buff+sent, len-sent, 0);
+				udt_send(udt_pipe->sock_udt, (char *)buff+sent, len-sent, 0);
 			if (len1 <= 0)
 				break;
 			sent -= len1;
@@ -490,10 +490,12 @@ static int do_punch_udt (int intport, const char *peerip, int peerport)
 		goto errout;
 	}
 
+	printf("try to udt_connect()\n");
 	if (udt_connect(sock, (const struct sockaddr *)&addr, sizeof(addr)) != 0) {
 		printf("failed to udt_connect %s\n", peerip);
 		goto errout;
 	}
+	printf("succeed udt_connect()\n");
 
 	assert(socketpair(AF_UNIX, SOCK_STREAM, 0, spair) == 0);
 
