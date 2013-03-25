@@ -324,7 +324,7 @@ static int do_update (int ntlclient, const char *ntlid, struct sockaddr_in *exta
 	assert(gettimeofday(&tv, NULL) == 0);
 	t1 = tv.tv_sec * 1000000 + tv.tv_usec;
 
-	msglen = sprintf(msg, "UPDATE\t%s\t%s\t%d\tdummy\t%s\t%d\tdummy",
+	msglen = sprintf(msg, "UPDATE\t%s\tP2PNAT\t%s\t%d\tdummy\tUDT\t%s\t%d\tdummy",
 			ntlid,
 			inet_ntoa(extaddrudp->sin_addr), ntohs(extaddrudp->sin_port),
 			inet_ntoa(extaddrtcp->sin_addr), ntohs(extaddrtcp->sin_port));
@@ -941,8 +941,8 @@ static int run_active (void)
 			continue;
 		}
 
-		assert(do_whoami(1, sock, &intport, &addr, 1) == 0);
-		msglen = sprintf(msg, "INVITE\t%s\tUDP\t%s\t%d\tdummy",
+		assert(do_whoami(0, sock, &intport, &addr, 1) == 0);
+		msglen = sprintf(msg, "INVITE\t%s\tUDT\t%s\t%d\tdummy",
 				option_ntlid, inet_ntoa(addr.sin_addr), ntohs(addr.sin_port));
 		assert(send(sock, msg, msglen, 0) == msglen);
 
