@@ -425,13 +425,20 @@ static void *thread_udtpipe (void *arg)
 	assert(&udt_pipe->up == (struct udt_pipe_struct **)arg || &udt_pipe->down == (struct udt_pipe_struct **)arg);
 	isup = &udt_pipe->up == (struct udt_pipe_struct **)arg;
 
+	printf("thread_udtpipe start, isup=%d\n", isup);
 	while (1) {
 		int sent = 0;
 		ssize_t len = isup ?
 			recv(udt_pipe->sock_sys, buff, sizeof(buff), 0) :
 			udt_recv(udt_pipe->sock_udt, buff, sizeof(buff), 0);
-		if (len <= 0)
+		if (len <= 0) {
+			if (isup)
+				perror("thread_udtpipe() recv failed");
+			else
+				printf("thread_udtpipe() recv failed udt_lasterror=%d\n", udt_getlasterror());
 			break;
+		}
+		printf("%s %d %02x%02x\n", isup ? "up" : "dn", len, buff[0], buff[1]);
 		while (sent < len) {
 			int len1 = isup ?
 				send(udt_pipe->sock_sys, buff+sent, len-sent, 0) :
@@ -444,6 +451,7 @@ static void *thread_udtpipe (void *arg)
 			break;
 	}
 
+	printf("thread_udtpipe end, isup=%d\n", isup);
 	pthread_mutex_lock(&udt_pipe->running_mutex);
 	if (udt_pipe->running_count == 2) { // I'm the first to exit
 		close(udt_pipe->sock_sys);
@@ -522,7 +530,7 @@ static int tunnel_handshake (struct tunnel_info *info)
 			return -1;
 		}
 		if (decode_msglen(msgbuf) != CTLMSG_INIT2) {
-			printf("tunnel_handshake() expected CTLMSG_INIT2, but get %02x%02x\n", msgbuf[0], msgbuf[1]);
+			printf("tunnel_handshake() expected CTLMSG_INIT2, but got %02x%02x\n", msgbuf[0], msgbuf[1]);
 			return -1;
 		}
 	} else {
@@ -532,7 +540,7 @@ static int tunnel_handshake (struct tunnel_info *info)
 			return -1;
 		}
 		if (decode_msglen(msgbuf) != CTLMSG_INIT1) {
-			printf("tunnel_handshake() expected CTLMSG_INIT1, but get %02x%02x\n", msgbuf[0], msgbuf[1]);
+			printf("tunnel_handshake() expected CTLMSG_INIT1, but got %02x%02x\n", msgbuf[0], msgbuf[1]);
 			return -1;
 		}
 
@@ -802,8 +810,10 @@ static void *thread_tunnel (void *arg)
 	info->sock_int = -1;
 	info->control_pipe[0] = info->control_pipe[1] = -1;
 
+	printf("try to handshake\n");
 	if (tunnel_handshake(info))
 		goto errout;
+	printf("handshake done\n");
 
 	if (info->isactive)
 		assert(pipe(info->control_pipe) == 0);

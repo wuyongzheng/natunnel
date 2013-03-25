@@ -26,6 +26,9 @@ int udt_send(int u, const char* buf, int len, int flags) {
 int udt_recv(int u, char* buf, int len, int flags) {
 	return UDT::recv((UDTSOCKET)u, buf, len, flags);
 }
+int udt_getlasterror(void) {
+	return UDT::getlasterror().getErrorCode();
+}
 
 int udt_setsockopt_rendezvous(int u, int rendezvous) {
 	bool rend = rendezvous;
