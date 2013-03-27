@@ -195,7 +195,7 @@ static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *add
 	char msg[1000];
 	int msglen;
 
-	if (argc != 6)
+	if (argc != 5)
 		goto errout;
 
 	//TODO: more input validation
@@ -305,7 +305,7 @@ void run_whoami_server (int tcp, struct sockaddr_in *listen_addr, const char *wh
 		assert(listen(sock, 1) == 0);
 	while (1) {
 		int client, msglen;
-		char *clientip, priv[41], msg[500];
+		char *clientip, msg[500];
 
 		memset(&addr, 0, sizeof(addr));
 		addrlen = sizeof(addr);
@@ -317,9 +317,8 @@ void run_whoami_server (int tcp, struct sockaddr_in *listen_addr, const char *wh
 		}
 		clientip = inet_ntoa(addr.sin_addr);
 		assert(clientip != NULL);
-		compute_priv((const unsigned char *)clientip, strlen(clientip), priv);
 
-		msglen = sprintf(msg, "WHOYOUARE\t%s\t%d\t%s", clientip, ntohs(addr.sin_port), priv);
+		msglen = sprintf(msg, "WHOYOUARE\t%s\t%d", clientip, ntohs(addr.sin_port));
 		if (tcp) {
 			assert(send(client, msg, msglen, 0) == msglen);
 			close(client);
