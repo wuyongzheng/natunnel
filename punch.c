@@ -20,20 +20,28 @@ int punch_fromstring (struct punch_param *punch, char *str)
 	char *argv[4];
 
 	argc = str_explode(str, ":", argv, sizeof(argv)/sizeof(argv[0]));
-	if (argc != 3)
+	if (argc != 3) {
+		printf("punch_fromstring() token != 3\n");
 		return -1;
+	}
 	if (strcmp(argv[0], "P2PNAT") == 0) {
 		punch->type = PT_P2PNAT;
-		if (inet_aton(argv[1], &punch->p2pnat.addr.sin_addr))
+		if (!inet_aton(argv[1], &punch->p2pnat.addr.sin_addr)) {
+			printf("invalid ip dot notation %s\n", argv[1]);
 			return -1;
+		}
 		punch->p2pnat.addr.sin_port = htons(atoi(argv[2]));
 	} else if (strcmp(argv[0], "UDT") == 0) {
 		punch->type = PT_UDT;
-		if (inet_aton(argv[1], &punch->udt.addr.sin_addr))
+		if (!inet_aton(argv[1], &punch->udt.addr.sin_addr)) {
+			printf("invalid ip dot notation %s\n", argv[1]);
 			return -1;
+		}
 		punch->udt.addr.sin_port = htons(atoi(argv[2]));
-	} else
+	} else {
+		printf("punch_fromstring() unknown type\n");
 		return -1;
+	}
 
 	return 0;
 }
