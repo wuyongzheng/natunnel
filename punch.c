@@ -24,8 +24,10 @@ int punch_fromstring (struct punch_param *punch, char *str)
 		printf("punch_fromstring() token != 3\n");
 		return -1;
 	}
+	memset(punch, 0, sizeof(struct punch_param));
 	if (strcmp(argv[0], "P2PNAT") == 0) {
 		punch->type = PT_P2PNAT;
+		punch->p2pnat.addr.sin_family = AF_INET;
 		if (!inet_aton(argv[1], &punch->p2pnat.addr.sin_addr)) {
 			printf("invalid ip dot notation %s\n", argv[1]);
 			return -1;
@@ -33,6 +35,7 @@ int punch_fromstring (struct punch_param *punch, char *str)
 		punch->p2pnat.addr.sin_port = htons(atoi(argv[2]));
 	} else if (strcmp(argv[0], "UDT") == 0) {
 		punch->type = PT_UDT;
+		punch->udt.addr.sin_family = AF_INET;
 		if (!inet_aton(argv[1], &punch->udt.addr.sin_addr)) {
 			printf("invalid ip dot notation %s\n", argv[1]);
 			return -1;

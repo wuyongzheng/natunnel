@@ -305,7 +305,7 @@ int ntl_waitinvite (struct ntl_struct *ntl, int timesec,
 			continue;
 		}
 		if (argc == 3 && strcmp(argv[0], "INVITE_P") == 0) {
-			return (punch_fromstring(&requested_punch[0], argv[1]) || punch_fromstring(&requested_punch[1], argv[1])) ? -1 : 1;
+			return (punch_fromstring(&requested_punch[0], argv[1]) || punch_fromstring(&requested_punch[1], argv[2])) ? -1 : 1;
 		}
 		printf("Unknown message: %s\n", argv[0]);
 		return -1;
