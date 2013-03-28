@@ -595,7 +595,7 @@ static int run_passive (void)
 	while (1) {
 		time_t currtime;
 		int retval, peersock;
-		struct punch_param requested_punch;
+		struct punch_param requested_punch[2];
 		struct tunnel_info *info;
 
 		currtime = time(NULL);
@@ -609,12 +609,23 @@ static int run_passive (void)
 		}
 
 		retval = ntl_waitinvite(ntl, lastupdate + WAI_EXPIRE - currtime,
-				punch_peer, 2, &requested_punch);
+				punch_peer, 2, requested_punch);
 		if (retval != 1)
 			continue;
-		peersock = requested_punch.type == PT_P2PNAT ?
-			punch_p2pnat(&punch_local[0], &requested_punch) :
-			punch_udt(&punch_local[1], &requested_punch);
+		if (requested_punch[0].type != PT_P2PNAT && requested_punch[0].type != PT_UDT)
+			continue;
+		if (requested_punch[0].type != requested_punch[1].type)
+			continue;
+		if ((requested_punch[0].type == PT_P2PNAT && memcmp(&requested_punch[0], &punch_peer[0], sizeof(requested_punch[0])) != 0) ||
+				(requested_punch[0].type == PT_UDT && memcmp(&requested_punch[0], &punch_peer[1], sizeof(requested_punch[0])) != 0)) {
+			printf("INVITE request error: mine is %s but I got %s\n",
+					punch_tostring(&punch_peer[requested_punch[0].type == PT_P2PNAT ? 0 : 1]),
+					punch_tostring(&requested_punch[0]));
+			continue;
+		}
+		peersock = requested_punch[1].type == PT_P2PNAT ?
+			punch_p2pnat(&punch_local[0], &requested_punch[1]) :
+			punch_udt(&punch_local[1], &requested_punch[1]);
 		if (peersock < 0)
 			continue;
 
@@ -642,9 +653,9 @@ static int run_active (void)
 	assert(ntl);
 
 	while (1) {
-		int peersock;
+		int peersock, queryn, i;
 		struct punch_local_param local;
-		struct punch_param ext, peer;
+		struct punch_param query[3], ext;
 		struct tunnel_info *info;
 
 		if (free_pool_count >= MINFREEPOOL) {
@@ -652,13 +663,26 @@ static int run_active (void)
 			continue;
 		}
 
-		// TODO: query first
+		queryn = ntl_query(ntl, query, sizeof(query)/sizeof(query[0]));
+		if (queryn <= 0) {
+			printf("ntl_query returns %d\n", queryn);
+			continue;
+		}
+		assert(queryn <= sizeof(query)/sizeof(query[0]));
+		for (i = 0; i < queryn; i ++) // TODO should try other methods.
+			if (query[i].type == PT_UDT)
+				break;
+		if (i == queryn) {
+			printf("no udt\n");
+			continue;
+		}
+
 		if (punch_udt_param_init(&local, &ext, 0) != 0)
 			continue;
-		if (ntl_invite(ntl, &ext, &peer) != 0)
+		if (ntl_invite(ntl, &ext, &query[i]) != 0)
 			continue;
-		assert(peer.type == PT_UDT);
-		peersock = punch_udt(&local, &peer);
+		assert(query[i].type == PT_UDT);
+		peersock = punch_udt(&local, &query[i]);
 		if (peersock < 0)
 			continue;
 

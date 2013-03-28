@@ -21,13 +21,16 @@ ip2/port2 -> X: WHOYOUARE, X's ip, port
 P -> S: UPDATE, priv_token, method1, method2, ...
 S -> P: UPDATE_OK
 method:
+  method_name:param1:param2...
   P2PNAT: Simultaneous connect, no listen. Ford's USENIX-ATC05 paper.
+    P2PNAT:1.2.3.4:6666
   UDT: UDP-based Data Transfer Library
+    UDT:1.2.3.4:6666
 
 == NAT Punch Through ==
 1.  A -> S: QUERY, pub_id
 2.  S -> A: QUERY_OK, method1, method2, ...
-3.  A -> S: INVITE, pub_id, method
-2a. S -> A: INVITE_A, method
-2b. S -> P: INVITE_P, method (2a,2b no order)
+3.  A -> S: INVITE, pub_id, P's method, A's method
+2a. S -> A: INVITE_A, P's method, A's method
+2b. S -> P: INVITE_P, P's method, A's method (2a,2b no order)
 3a. A <-> P: (connect) hole punching, tunnel data

@@ -15,8 +15,10 @@
 #include "ntlproto.h"
 
 #define NTL_TIMEOUTSEC 3
-#define NTL_UPDATESEC (5*60)
-#define NTL_UPDATELIMITSEC 30
+#define NTL_UPDATESEC 60
+#define NTL_UPDATELIMITSEC 15
+
+//TODO sequence number, retry
 
 static void setsocketto (int sock, int tosec)
 {
@@ -215,7 +217,7 @@ int ntl_query (struct ntl_struct *ntl, struct punch_param *supported_punches, in
 	return i;
 }
 
-int ntl_invite (struct ntl_struct *ntl, const struct punch_param *ext, struct punch_param *peer)
+int ntl_invite (struct ntl_struct *ntl, const struct punch_param *ext, const struct punch_param *peer)
 {
 	int argc, msglen;
 	char msg[500], *argv[10];
@@ -224,9 +226,9 @@ int ntl_invite (struct ntl_struct *ntl, const struct punch_param *ext, struct pu
 		printf("ntl_invite() no pubid\n");
 		return -1;
 	}
-	snprintf(msg, sizeof(msg), "INVITE\t%s\t%s\n", ntl->pubid, punch_tostring(ext));
+	msglen = snprintf(msg, sizeof(msg), "INVITE\t%s\t%s\t%s\n", ntl->pubid, punch_tostring(peer), punch_tostring(ext));
 	puts(msg);
-	if (send(ntl->sock, msg, strlen(msg), 0) != strlen(msg)) {
+	if (send(ntl->sock, msg, msglen, 0) != msglen) {
 		perror("ntl_invite() send INVITE failed");
 		return -1;
 	}
@@ -239,9 +241,9 @@ int ntl_invite (struct ntl_struct *ntl, const struct punch_param *ext, struct pu
 	msg[msglen] = '\0';
 	puts(msg);
 	argc = str_explode(msg, "\t", argv, sizeof(argv)/sizeof(argv[0]));
-	if (argc != 2 || strcmp(argv[0], "INVITE_OK") != 0)
+	if (argc != 3 || strcmp(argv[0], "INVITE_A") != 0) // we just ignore the rest??
 		return -1;
-	return punch_fromstring(peer, argv[1]);
+	return 0;
 }
 
 /* timesec: if no invite with n seconds, return 0
@@ -299,8 +301,8 @@ int ntl_waitinvite (struct ntl_struct *ntl, int timesec,
 			ntl->lastupdate_recv = time(NULL);
 			continue;
 		}
-		if (argc == 2 && strcmp(argv[0], "INVITE_P") == 0) {
-			return punch_fromstring(requested_punch, argv[1]) ? -1 : 1;
+		if (argc == 3 && strcmp(argv[0], "INVITE_P") == 0) {
+			return (punch_fromstring(&requested_punch[0], argv[1]) || punch_fromstring(&requested_punch[1], argv[1])) ? -1 : 1;
 		}
 		return -1;
 	}

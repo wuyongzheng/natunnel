@@ -21,10 +21,7 @@ struct hostentry {
 	time_t utime;
 	struct sockaddr_in addr;
 	struct hostentry *next;
-	struct in_addr udt_ip;
-	int udt_port;
-	struct in_addr p2pnat_ip;
-	int p2pnat_port;
+	char *methods;
 };
 
 char option_secret[] = "secret";
@@ -36,6 +33,16 @@ struct sockaddr_in whoamitcp_addr[2], whoamiudp_addr[2];
 struct hostentry *hostable[HOSTABLE_SIZE] = {0};
 int hostable_used = 0;
 time_t hostable_mtime = 0;
+
+static void free_hostentry (struct hostentry *entry)
+{
+	assert(entry && entry->pubid);
+	free(entry->pubid);
+	if (entry->methods)
+		free(entry->methods);
+	entry->pubid = entry->methods = NULL;
+	free(entry);
+}
 
 static void hostable_maintain (void)
 {
@@ -49,8 +56,7 @@ static void hostable_maintain (void)
 		struct hostentry *entry = hostable[i];
 		while (entry != NULL && currtime - entry->utime > EXPIRE) { // deal with head
 			hostable[i] = entry->next;
-			free(entry->pubid);
-			free(entry);
+			free_hostentry(entry);
 			hostable_used --;
 			entry = hostable[i];
 		}
@@ -60,8 +66,7 @@ static void hostable_maintain (void)
 			if (currtime - entry->next->utime > EXPIRE) {
 				struct hostentry *todel = entry->next;
 				entry->next = todel->next;
-				free(todel->pubid);
-				free(todel);
+				free_hostentry(todel);
 				hostable_used --;
 			} else {
 				entry = entry->next;
@@ -70,7 +75,8 @@ static void hostable_maintain (void)
 	}
 }
 
-static void hostable_update (const char *pubid, const char *p2pnat_ip, int p2pnat_port, const char *udt_ip, int udt_port, struct sockaddr_in *addr)
+// methods much be freeable
+static void hostable_update (const char *pubid, char *methods, struct sockaddr_in *addr)
 {
 	unsigned long hashval = 0;
 	struct hostentry *entry;
@@ -84,27 +90,14 @@ static void hostable_update (const char *pubid, const char *p2pnat_ip, int p2pna
 	if (entry == NULL) {
 		entry = (struct hostentry *)malloc(sizeof(struct hostentry));
 		entry->pubid = strdup(pubid);
-		memset(&entry->udt_ip, 0, sizeof(entry->udt_ip));
-		if (udt_ip)
-			assert(inet_aton(udt_ip, &entry->udt_ip));
-		entry->udt_port = udt_port;
-		memset(&entry->p2pnat_ip, 0, sizeof(entry->p2pnat_ip));
-		if (p2pnat_ip)
-			assert(inet_aton(p2pnat_ip, &entry->p2pnat_ip));
-		entry->p2pnat_port = p2pnat_port;
+		entry->methods = methods;
 		entry->utime = time(NULL);
 		memcpy(&entry->addr, addr, sizeof(struct sockaddr_in));
 		entry->next = hostable[hashval];
 		hostable[hashval] = entry;
 	} else {
-		memset(&entry->udt_ip, 0, sizeof(entry->udt_ip));
-		if (udt_ip)
-			assert(inet_aton(udt_ip, &entry->udt_ip));
-		entry->udt_port = udt_port;
-		memset(&entry->p2pnat_ip, 0, sizeof(entry->p2pnat_ip));
-		if (p2pnat_ip)
-			assert(inet_aton(p2pnat_ip, &entry->p2pnat_ip));
-		entry->p2pnat_port = p2pnat_port;
+		free(entry->methods);
+		entry->methods = methods;
 		entry->utime = time(NULL);
 		memcpy(&entry->addr, addr, sizeof(struct sockaddr_in));
 	}
@@ -158,13 +151,11 @@ static void do_register (int argc, char *argv[], int sock, struct sockaddr_in *a
 
 static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *addr)
 {
-	char prvbuf[41], *pub, *prv, msg[32];
+	char prvbuf[41], *pub, *prv, msg[32], *methods;
 	struct timeval tv;
-	int msglen;
+	int msglen, i;
 
-	if (argc != 10) // TODO: should not hardcode methords
-		goto errout;
-	if (strcmp(argv[2], "P2PNAT") != 0 || strcmp(argv[6], "UDT") != 0)
+	if (argc < 3)
 		goto errout;
 	if (strchr(argv[1], ':') == NULL)
 		goto errout;
@@ -177,7 +168,17 @@ static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *add
 		goto errout;
 
 	// input validation on ip address?
-	hostable_update(pub, argv[3], atoi(argv[4]), argv[7], atoi(argv[8]), addr);
+
+	for (msglen = 0, i = 2; i < argc; i ++)
+		msglen += strlen(argv[i]) + 1;
+	methods = malloc(msglen);
+	strcpy(methods, argv[2]);
+	for (msglen = 0, i = 3; i < argc; i ++) {
+		strcat(methods, "\t");
+		strcat(methods, argv[i]);
+	}
+
+	hostable_update(pub, methods, addr);
 	hostable_maintain();
 
 	assert(gettimeofday(&tv, NULL) == 0);
@@ -189,17 +190,13 @@ errout:
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
 }
 
-static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *addr)
+static void do_query (int argc, char *argv[], int sock, struct sockaddr_in *addr)
 {
 	struct hostentry *entry;
 	char msg[1000];
 	int msglen;
 
-	if (argc != 5)
-		goto errout;
-
-	//TODO: more input validation
-	if (strlen(argv[2]) + strlen(argv[3]) + strlen(argv[4])> 500)
+	if (argc != 2)
 		goto errout;
 
 	hostable_maintain();
@@ -207,17 +204,35 @@ static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *add
 	if (entry == NULL)
 		goto errout;
 
-	if (strcmp(argv[2], "P2PNAT") == 0) {
-		msglen = sprintf(msg, "INVITE_A\tP2PNAT\t%s\t%d",
-				inet_ntoa(entry->p2pnat_ip),
-				entry->p2pnat_port);
-	} else {
-		msglen = sprintf(msg, "INVITE_A\tUDT\t%s\t%d",
-				inet_ntoa(entry->udt_ip),
-				entry->udt_port);
-	}
+	msglen = snprintf(msg, sizeof(msg), "QUERY_OK\t%s", entry->methods);
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
-	msglen = sprintf(msg, "INVITE_P\t%s\t%s\t%s", argv[2], argv[3], argv[4]);
+	return;
+errout:
+	msglen = sprintf(msg, "QUERY_ERROR");
+	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
+}
+
+static void do_invite (int argc, char *argv[], int sock, struct sockaddr_in *addr)
+{
+	struct hostentry *entry;
+	char msg[1000];
+	int msglen;
+
+	if (argc != 4)
+		goto errout;
+
+	//TODO: more input validation
+	//if (strlen(argv[2]) + strlen(argv[3]) + strlen(argv[4])> 500)
+	//	goto errout;
+
+	hostable_maintain();
+	entry = hostable_lookup(argv[1]);
+	if (entry == NULL)
+		goto errout;
+
+	msglen = snprintf(msg, sizeof(msg), "INVITE_A\t%s\t%s", argv[2], argv[3]);
+	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
+	msglen = snprintf(msg, sizeof(msg), "INVITE_P\t%s\t%s", argv[2], argv[3]);
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)&entry->addr, sizeof(struct sockaddr_in)) == msglen);
 	return;
 errout:
@@ -268,6 +283,8 @@ static void do_msg (char *msg, int sock, struct sockaddr_in *addr)
 		do_register(argc, argv, sock, addr);
 	else if (strcmp(argv[0], "UPDATE") == 0)
 		do_update(argc, argv, sock, addr);
+	else if (strcmp(argv[0], "QUERY") == 0)
+		do_query(argc, argv, sock, addr);
 	else if (strcmp(argv[0], "INVITE") == 0)
 		do_invite(argc, argv, sock, addr);
 	else if (strcmp(argv[0], "WHOAMI") == 0)
