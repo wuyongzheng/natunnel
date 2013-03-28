@@ -192,7 +192,7 @@ int ntl_query (struct ntl_struct *ntl, struct punch_param *supported_punches, in
 		printf("ntl_query() no pubid\n");
 		return -1;
 	}
-	snprintf(msg, sizeof(msg), "QUERY\t%s\n", ntl->pubid);
+	snprintf(msg, sizeof(msg), "QUERY\t%s", ntl->pubid);
 	puts(msg);
 	if (send(ntl->sock, msg, strlen(msg), 0) != strlen(msg)) {
 		perror("ntl_query() send QUERY failed");
@@ -226,7 +226,7 @@ int ntl_invite (struct ntl_struct *ntl, const struct punch_param *ext, const str
 		printf("ntl_invite() no pubid\n");
 		return -1;
 	}
-	msglen = snprintf(msg, sizeof(msg), "INVITE\t%s\t%s\t%s\n", ntl->pubid, punch_tostring(peer), punch_tostring(ext));
+	msglen = snprintf(msg, sizeof(msg), "INVITE\t%s\t%s\t%s", ntl->pubid, punch_tostring(peer), punch_tostring(ext));
 	puts(msg);
 	if (send(ntl->sock, msg, msglen, 0) != msglen) {
 		perror("ntl_invite() send INVITE failed");
@@ -304,6 +304,7 @@ int ntl_waitinvite (struct ntl_struct *ntl, int timesec,
 		if (argc == 3 && strcmp(argv[0], "INVITE_P") == 0) {
 			return (punch_fromstring(&requested_punch[0], argv[1]) || punch_fromstring(&requested_punch[1], argv[1])) ? -1 : 1;
 		}
+		printf("Unknown message: %s\n", argv[0]);
 		return -1;
 	}
 }

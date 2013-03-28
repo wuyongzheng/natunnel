@@ -95,6 +95,7 @@ static void hostable_update (const char *pubid, char *methods, struct sockaddr_i
 		memcpy(&entry->addr, addr, sizeof(struct sockaddr_in));
 		entry->next = hostable[hashval];
 		hostable[hashval] = entry;
+		hostable_used ++;
 	} else {
 		free(entry->methods);
 		entry->methods = methods;
@@ -182,7 +183,8 @@ static void do_update (int argc, char *argv[], int sock, struct sockaddr_in *add
 	hostable_maintain();
 
 	assert(gettimeofday(&tv, NULL) == 0);
-	msglen = sprintf(msg, "UPDATE_OK\t%lu\t%lu", (unsigned long)tv.tv_sec, (unsigned long)tv.tv_usec);
+	//msglen = sprintf(msg, "UPDATE_OK\t%lu\t%lu", (unsigned long)tv.tv_sec, (unsigned long)tv.tv_usec);
+	msglen = sprintf(msg, "UPDATE_OK");
 	assert(sendto(sock, msg, msglen, 0, (struct sockaddr *)addr, sizeof(struct sockaddr_in)) == msglen);
 	return;
 errout:

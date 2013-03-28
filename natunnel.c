@@ -652,16 +652,14 @@ static int run_active (void)
 	ntl = ntl_init(&addr, option_ntlid, NULL);
 	assert(ntl);
 
-	while (1) {
+	for (; ; sleep(5)) {
 		int peersock, queryn, i;
 		struct punch_local_param local;
 		struct punch_param query[3], ext;
 		struct tunnel_info *info;
 
-		if (free_pool_count >= MINFREEPOOL) {
-			sleep(5);
+		if (free_pool_count >= MINFREEPOOL)
 			continue;
-		}
 
 		queryn = ntl_query(ntl, query, sizeof(query)/sizeof(query[0]));
 		if (queryn <= 0) {
@@ -691,7 +689,6 @@ static int run_active (void)
 		info->isactive = 1;
 		info->sock_ext = peersock;
 		assert(pthread_create(&info->threadid, NULL, thread_tunnel, info) == 0);
-		sleep(5);
 	}
 }
 
