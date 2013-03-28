@@ -73,5 +73,6 @@ int punch_p2pnat_param_init (struct punch_local_param *local, struct punch_param
 {
 	if (!haslocal)
 		local->p2pnat.localport = -1;
+	local->type = peer->type = PT_P2PNAT;
 	return do_stun(1, haslocal ? 0 : 1, &local->p2pnat.localport, &peer->p2pnat.addr);
 }

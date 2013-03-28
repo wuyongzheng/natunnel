@@ -40,18 +40,18 @@ int punch_fromstring (struct punch_param *punch, char *str)
 
 char *punch_tostring (const struct punch_param *punch)
 {
-	static char buffer[32][4];
+	static char buffer[4][32];
 	static unsigned int ptr = 0;
 	char *buf = buffer[ptr ++ % 4];
 
 	switch (punch->type) {
 		case PT_P2PNAT:
-			snprintf(buf, 32, "P2PNAT:%s:%d",
+			snprintf(buf, sizeof(buffer[0]), "P2PNAT:%s:%d",
 					inet_ntoa(punch->p2pnat.addr.sin_addr),
 					ntohs(punch->p2pnat.addr.sin_port));
 			break;
 		case PT_UDT:
-			snprintf(buf, 32, "UDT:%s:%d",
+			snprintf(buf, sizeof(buffer[0]), "UDT:%s:%d",
 					inet_ntoa(punch->udt.addr.sin_addr),
 					ntohs(punch->udt.addr.sin_port));
 			break;
