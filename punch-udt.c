@@ -126,7 +126,7 @@ errout:
 int punch_udt_param_init (struct punch_local_param *local, struct punch_param *peer, int haslocal)
 {
 	if (!haslocal)
-		local->udt.localport = -1;
+		local->udt.localport = 0;
 	local->type = peer->type = PT_UDT;
 	return do_stun(0, haslocal ? 0 : 1, &local->udt.localport, &peer->udt.addr);
 }
