@@ -72,7 +72,8 @@ errout:
 int punch_p2pnat_param_init (struct punch_local_param *local, struct punch_param *peer, int haslocal)
 {
 	if (!haslocal)
-		local->p2pnat.localport = -1;
+		memset(local, 0, sizeof(struct punch_local_param));
+	memset(peer, 0, sizeof(struct punch_param));
 	local->type = peer->type = PT_P2PNAT;
 	return do_stun(1, haslocal ? 0 : 1, &local->p2pnat.localport, &peer->p2pnat.addr);
 }

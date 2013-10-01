@@ -283,17 +283,20 @@ int ntl_waitinvite (struct ntl_struct *ntl, int timesec,
 			ntl->lastupdate_sent = currtime;
 		}
 
-		if (timesec != -1 && entrytime + timesec >= currtime)
+		if (timesec == 0)
+			return 0;
+		if (timesec > 0 && currtime >= entrytime + timesec)
 			return 0;
 
 		setsocketto(ntl->sock, NTL_UPDATELIMITSEC);
 		msglen = recv(ntl->sock, msg, sizeof(msg)-1, 0);
-		if (msglen < 0) {
+		if (msglen == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+			continue;
+		}
+		if (msglen <= 0) {
 			perror("recv UPDATE_OK/INVITE_P error");
 			return -1;
 		}
-		if (msglen == 0)
-			continue;
 		msg[msglen] = '\0';
 		puts(msg);
 		argc = str_explode(msg, "\t", argv, sizeof(argv)/sizeof(argv[0]));
@@ -302,7 +305,7 @@ int ntl_waitinvite (struct ntl_struct *ntl, int timesec,
 			continue;
 		}
 		if (argc == 3 && strcmp(argv[0], "INVITE_P") == 0) {
-			return (punch_fromstring(&requested_punch[0], argv[1]) || punch_fromstring(&requested_punch[1], argv[1])) ? -1 : 1;
+			return (punch_fromstring(&requested_punch[0], argv[1]) || punch_fromstring(&requested_punch[1], argv[2])) ? -1 : 1;
 		}
 		printf("Unknown message: %s\n", argv[0]);
 		return -1;
